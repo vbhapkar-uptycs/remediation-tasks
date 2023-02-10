@@ -62,6 +62,7 @@ module.exports.handler = async (event, context, callback) => {
             const addNewPolicyCommand = new PutBucketPolicyCommand(adderPolicy);
             const addNewPolicyResponse = await client.send(addNewPolicyCommand);
             event.response = addNewPolicyResponse;
+            console.log(addNewPolicyResponse);
         } else {
             policy = JSON.parse(policy);
 
