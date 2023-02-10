@@ -10,15 +10,20 @@ const {
 } = require("../utils");
 
 const adderPolicy = {
-    Effect: "Deny",
-    Principal: "*",
-    Action: "s3:GetObject",
-    Resource: "arn:aws:s3:::<bucket_name>/*",
-    Condition: {
-        Bool: {
-            "aws:SecureTransport": "false",
+    Version: "2012-10-17",
+    Statement: [
+        {
+            Effect: "Deny",
+            Principal: "*",
+            Action: "s3:GetObject",
+            Resource: "arn:aws:s3:::<bucket_name>/*",
+            Condition: {
+                Bool: {
+                    "aws:SecureTransport": "false",
+                },
+            },
         },
-    },
+    ],
 };
 
 /**
@@ -51,29 +56,32 @@ module.exports.handler = async (event, context, callback) => {
         const getCommand = new GetBucketPolicyCommand(bucketName);
         const policy = await client.send(getCommand);
 
+
+        // IF NO POLICY IS ATTACHED TO THE BUCKET 
         if (!policy) {
-            throw new ApplicationError("Invalid bucket name or policy not found");
+            const addNewPolicyCommand = new PutBucketPolicyCommand(adderPolicy);
+            const addNewPolicyResponse = await client.send(addNewPolicyCommand);
+            event.response = addNewPolicyResponse;
+        } else {
+            policy = JSON.parse(policy);
+
+            //adderPolicy is policy which will get added to the existing bucket
+            adderPolicy.Statement[0].Resource =
+                adderPolicy.Statement[0].Resource.replace(
+                    "<bucket_name>",
+                    event.bucketName
+                );
+            policy.Statement.push(adderPolicy.Statement[0]);
+
+            policy = JSON.stringify(policy);
+
+            // PUT BUCKET POLICY
+            const putCommand = new PutBucketPolicyCommand(policy);
+            const putResponse = await client.send(putCommand);
+            event.response = putResponse;
+
+            console.log(putResponse);
         }
-        event.lambdaExecutorRecievedTime = new Date();
-
-        // response will be policy in string format
-        policy = JSON.parse(policy);
-
-        //adderPolicy is policy which will get added to the existing bucket
-        adderPolicy.Resource = adderPolicy.Resource.replace(
-            "<bucket_name>",
-            event.bucketName
-        );
-        policy.Statement.push(adderPolicy);
-
-        policy = JSON.stringify(policy);
-
-        // PUT BUCKET POLICY
-        const putCommand = new PutBucketPolicyCommand(policy);
-        const putResponse = await client.send(putCommand);
-        event.response = putResponse;
-
-        console.log(putResponse);
     } catch (err) {
         event.error = err;
         console.error("Error : ", err.message);
